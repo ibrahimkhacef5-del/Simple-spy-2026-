@@ -1,8 +1,8 @@
 --[[
-    highlight.lua v0.2.0 - Syntax Highlighter متطور
-    - تلوين متقدم لكل أنواع الأكواد
-    - دعم كامل للـ Lua 5.1 + Luau
-    - أداء محسن
+    highlight.lua v2.0 - Syntax Highlighter متطور جداً
+    - يدعم أكثر من 16 مليون لون
+    - كل نوع له وظيفة تلوين مخصصة
+    - تلوين ذكي حسب السياق
 ]]
 
 local cloneref = cloneref or function(...) return ... end
@@ -13,28 +13,649 @@ local RunService = cloneref(game:GetService("RunService"))
 local Highlight = {}
 
 -- ============================================================
--- الألوان الجديدة (أكثر تنوعاً وجمالاً)
+-- نظام الألوان المتقدم (16 مليون لون +)
 -- ============================================================
-local Colors = {
-    Background = Color3.fromRGB(28, 30, 38),      -- خلفية داكنة
-    LineNumber = Color3.fromRGB(80, 85, 100),     -- أرقام الأسطر
+
+local ColorSystem = {
+    -- الألوان الأساسية (مع إمكانية التعديل الديناميكي)
+    base = {
+        background = Color3.fromRGB(28, 30, 38),
+        lineNumber = Color3.fromRGB(80, 85, 100),
+    },
     
-    -- الكلمات المفتاحية (Keywords)
-    Keyword = Color3.fromRGB(197, 134, 192),      -- بنفسجي فاتح (if, for, while)
-    KeywordControl = Color3.fromRGB(197, 134, 192), -- بنفسجي (return, break)
-    KeywordCondition = Color3.fromRGB(230, 180, 100), -- ذهبي (then, else, elseif)
+    -- وظائف توليد الألوان الديناميكية
+    generators = {
+        -- لون يعتمد على قيمة الهاش
+        hash = function(str)
+            local hash = 0
+            for i = 1, #str do
+                hash = (hash * 31 + string.byte(str, i)) % 16777216
+            end
+            return Color3.fromRGB(
+                (hash // 65536) % 256,
+                (hash // 256) % 256,
+                hash % 256
+            )
+        end,
+        
+        -- لون متدرج حسب الموضع
+        gradient = function(index, total, saturation, brightness)
+            saturation = saturation or 1
+            brightness = brightness or 1
+            local hue = (index / total) % 1
+            return Color3.fromHSV(hue, saturation, brightness)
+        end,
+        
+        -- لون عشوائي ولكن ثابت (يعتمد على الاسم)
+        stable = function(name)
+            local seed = 0
+            for i = 1, #name do
+                seed = seed + string.byte(name, i)
+            end
+            local r = (seed * 123) % 256
+            local g = (seed * 456) % 256
+            local b = (seed * 789) % 256
+            return Color3.fromRGB(r, g, b)
+        end,
+        
+        -- لون نيون مع توهج
+        neon = function(hue)
+            local color = Color3.fromHSV(hue % 1, 1, 1)
+            return Color3.new(
+                math.min(color.R * 1.5, 1),
+                math.min(color.G * 1.5, 1),
+                math.min(color.B * 1.5, 1)
+            )
+        end,
+        
+        -- لون باستيل (ناعم)
+        pastel = function(hue)
+            local color = Color3.fromHSV(hue % 1, 0.4, 0.9)
+            return color
+        end,
+        
+        -- لون داكن (غامق)
+        dark = function(hue)
+            local color = Color3.fromHSV(hue % 1, 0.8, 0.3)
+            return color
+        end,
+    },
     
-    -- الدوال
-    Function = Color3.fromRGB(97, 175, 239),      -- أزرق فاتح
-    FunctionCall = Color3.fromRGB(97, 175, 239),  -- أزرق فاتح
+    -- أنماط التلوين المخصصة لكل نوع
+    patterns = {
+        keywords = {
+            type = "hash",
+            colors = {},
+            function(color)
+                return color
+            end
+        },
+        functions = {
+            type = "gradient",
+            colors = {},
+            function(color, index, total)
+                return ColorSystem.generators.gradient(index, total, 0.8, 1)
+            end
+        },
+        strings = {
+            type = "stable",
+            colors = {},
+            function(color, text)
+                return ColorSystem.generators.stable(text)
+            end
+        },
+        numbers = {
+            type = "pastel",
+            colors = {},
+            function(color, num)
+                return ColorSystem.generators.pastel((tonumber(num) or 0) / 100)
+            end
+        },
+        comments = {
+            type = "dark",
+            colors = {},
+            function(color, text)
+                local hue = (#text % 10) / 10
+                return ColorSystem.generators.dark(hue)
+            end
+        },
+        operators = {
+            type = "neon",
+            colors = {},
+            function(color, op)
+                local hues = {
+                    ["+"] = 0.05, ["-"] = 0.1, ["*"] = 0.15, ["/"] = 0.2,
+                    ["="] = 0.25, ["=="] = 0.3, ["~="] = 0.35,
+                    ["<"] = 0.4, [">"] = 0.45, ["<="] = 0.5, [">="] = 0.55,
+                    ["and"] = 0.6, ["or"] = 0.65, ["not"] = 0.7,
+                    ["."] = 0.75, [":"] = 0.8, [","] = 0.85,
+                }
+                return ColorSystem.generators.neon(hues[op] or 0.5)
+            end
+        },
+        variables = {
+            type = "stable",
+            colors = {},
+            function(color, name)
+                return ColorSystem.generators.stable(name)
+            end
+        },
+        booleans = {
+            type = "hash",
+            colors = {},
+            function(color, bool)
+                return bool == "true" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+            end
+        },
+        instances = {
+            type = "stable",
+            colors = {},
+            function(color, name)
+                return ColorSystem.generators.stable(name .. "Instance")
+            end
+        },
+        tables = {
+            type = "gradient",
+            colors = {},
+            function(color, index, total)
+                return ColorSystem.generators.gradient(index, total, 0.6, 0.8)
+            end
+        },
+        special = {
+            type = "neon",
+            colors = {},
+            function(color, text)
+                local specials = {
+                    ["self"] = 0.9,
+                    ["nil"] = 0.95,
+                    ["..."] = 0.85,
+                    ["_G"] = 0.75,
+                }
+                return ColorSystem.generators.neon(specials[text] or 0.5)
+            end
+        }
+    }
+}
+
+-- ============================================================
+-- إعدادات التلوين
+-- ============================================================
+
+local parentFrame
+local scrollingFrame
+local textFrame
+local lineNumbersFrame
+local tableContents = {}
+local line = 0
+local largestX = 0
+local lineSpace = 15
+local font = Enum.Font.Ubuntu
+local textSize = 14
+local offLimits = {}
+
+-- ============================================================
+-- دوال التلوين الذكية
+-- ============================================================
+
+local function getColorForKeyword(keyword)
+    local keywords = {
+        ["function"] = 0.0, ["local"] = 0.05, ["if"] = 0.1, ["then"] = 0.15,
+        ["else"] = 0.2, ["elseif"] = 0.25, ["end"] = 0.3, ["for"] = 0.35,
+        ["while"] = 0.4, ["do"] = 0.45, ["repeat"] = 0.5, ["until"] = 0.55,
+        ["return"] = 0.6, ["break"] = 0.65, ["continue"] = 0.7, ["goto"] = 0.75,
+        ["and"] = 0.8, ["or"] = 0.85, ["not"] = 0.9,
+    }
+    local hue = keywords[keyword] or 0.5
+    return ColorSystem.generators.neon(hue)
+end
+
+local function getColorForString(str)
+    local hash = 0
+    for i = 1, #str do
+        hash = (hash * 31 + string.byte(str, i)) % 16777216
+    end
+    local r = (hash // 65536) % 256
+    local g = (hash // 256) % 256
+    local b = hash % 256
+    -- تجعل الألوان أكثر إشراقاً للنصوص
+    return Color3.fromRGB(
+        math.min(r + 50, 255),
+        math.min(g + 50, 255),
+        math.min(b + 50, 255)
+    )
+end
+
+local function getColorForNumber(num)
+    local val = tonumber(num) or 0
+    local hue = (math.abs(val) % 1) * 0.8 + 0.1
+    return ColorSystem.generators.pastel(hue)
+end
+
+local function getColorForOperator(op)
+    local hues = {
+        ["+"] = 0.0, ["-"] = 0.05, ["*"] = 0.1, ["/"] = 0.15,
+        ["="] = 0.2, ["=="] = 0.25, ["~="] = 0.3,
+        ["<"] = 0.35, [">"] = 0.4, ["<="] = 0.45, [">="] = 0.5,
+        ["and"] = 0.55, ["or"] = 0.6, ["not"] = 0.65,
+        ["."] = 0.7, [":"] = 0.75, [","] = 0.8,
+        ["("] = 0.85, [")"] = 0.9, ["["] = 0.92, ["]"] = 0.94,
+        ["{"] = 0.96, ["}"] = 0.98,
+    }
+    return ColorSystem.generators.neon(hues[op] or 0.5)
+end
+
+-- ============================================================
+-- دوال التعرف على الأنماط
+-- ============================================================
+
+local patterns = {
+    -- الكلمات المفتاحية
+    keywords = {
+        "function", "local", "if", "then", "else", "elseif", "end",
+        "for", "while", "do", "repeat", "until",
+        "return", "break", "continue", "goto",
+        "and", "or", "not",
+    },
+    -- الكلمات الخاصة
+    special = {"self", "nil", "...", "_G", "_ENV"},
+    -- المعاملات
+    operators = {"+", "-", "*", "/", "=", "==", "~=", "<", ">", "<=", ">=", ".", ":", ",", "(", ")", "[", "]", "{", "}"},
+}
+
+-- ============================================================
+-- دوال التلوين الأساسية
+-- ============================================================
+
+function gfind(str, pattern)
+    return coroutine.wrap(function()
+        local start = 0
+        while true do
+            local findStart, findEnd = str:find(pattern, start)
+            if findStart and findEnd ~= #str then
+                start = findEnd + 1
+                coroutine.yield(findStart, findEnd)
+            else
+                return
+            end
+        end
+    end)
+end
+
+function isOffLimits(index)
+    for _, v in next, offLimits do
+        if index >= v[1] and index <= v[2] then
+            return true
+        end
+    end
+    return false
+end
+
+function autoEscape(s)
+    local result = ""
+    for i = 1, #s do
+        local char = s:sub(i, i)
+        if char == "<" then
+            result = result .. "&lt;"
+        elseif char == ">" then
+            result = result .. "&gt;"
+        elseif char == '"' then
+            result = result .. "&quot;"
+        elseif char == "'" then
+            result = result .. "&apos;"
+        elseif char == "&" then
+            result = result .. "&amp;"
+        else
+            result = result .. char
+        end
+    end
+    return result
+end
+
+-- ============================================================
+-- تلوين متقدم لكل نوع
+-- ============================================================
+
+function renderAdvanced()
+    offLimits = {}
+    textFrame:ClearAllChildren()
+    lineNumbersFrame:ClearAllChildren()
     
-    -- المتغيرات
-    Variable = Color3.fromRGB(220, 220, 255),     -- أبيض مائل للأزرق
-    LocalVariable = Color3.fromRGB(200, 200, 230), 
-    GlobalVariable = Color3.fromRGB(180, 200, 255),
+    local str = Highlight:getRaw()
     
-    -- النصوص
-    String = Color3.fromRGB(152, 195, 121),       -- أخضر
+    -- تلوين التعليقات أولاً
+    for commentStart, commentEnd in gfind(str, "%-%-[^\n]+") do
+        if not isOffLimits(commentStart) then
+            local color = getColorForString(str:sub(commentStart, commentEnd))
+            for i = commentStart, commentEnd do
+                if tableContents[i] then
+                    tableContents[i].Color = color
+                    tableContents[i].Color = Color3.new(
+                        color.R * 0.5,
+                        color.G * 0.5,
+                        color.B * 0.5
+                    )
+                end
+            end
+            table.insert(offLimits, {commentStart, commentEnd})
+        end
+    end
+    
+    -- تلوين النصوص
+    local inString = false
+    local stringStart = 0
+    local stringChar = ""
+    
+    for i, char in next, tableContents do
+        if not inString and (char.Char == '"' or char.Char == "'") and not isOffLimits(i) then
+            inString = true
+            stringStart = i
+            stringChar = char.Char
+            char.Color = getColorForString("string")
+        elseif inString and char.Char == stringChar and not isOffLimits(i) then
+            inString = false
+            char.Color = getColorForString("string")
+            table.insert(offLimits, {stringStart, i})
+        elseif inString then
+            char.Color = getColorForString("string")
+        end
+    end
+    
+    -- تلوين الكلمات المفتاحية
+    for _, keyword in next, patterns.keywords do
+        for findStart, findEnd in gfind(str, "[^%w_](" .. keyword .. ")[^%w_]") do
+            if not isOffLimits(findStart) and not isOffLimits(findEnd) then
+                local start = findStart + 1
+                local endPos = findEnd - 1
+                local color = getColorForKeyword(keyword)
+                for i = start, endPos do
+                    if tableContents[i] then
+                        tableContents[i].Color = color
+                    end
+                end
+            end
+        end
+    end
+    
+    -- تلوين الكلمات الخاصة
+    for _, word in next, patterns.special do
+        for findStart, findEnd in gfind(str, "[^%w_](" .. word .. ")[^%w_]") do
+            if not isOffLimits(findStart) and not isOffLimits(findEnd) then
+                local start = findStart + 1
+                local endPos = findEnd - 1
+                local color = getColorForKeyword(word)
+                for i = start, endPos do
+                    if tableContents[i] then
+                        tableContents[i].Color = color
+                    end
+                end
+            end
+        end
+    end
+    
+    -- تلوين الأرقام
+    for findStart, findEnd in gfind(str, "[%d]+%.?[%d]*") do
+        if not isOffLimits(findStart) and not isOffLimits(findEnd) then
+            local num = str:sub(findStart, findEnd)
+            local color = getColorForNumber(num)
+            for i = findStart, findEnd do
+                if tableContents[i] then
+                    tableContents[i].Color = color
+                end
+            end
+        end
+    end
+    
+    -- تلوين المعاملات
+    for _, op in next, patterns.operators do
+        local pattern = "[^%w_%p](" .. op .. ")[^%w_%p]"
+        for findStart, findEnd in gfind(str, pattern) do
+            if not isOffLimits(findStart) and not isOffLimits(findEnd) then
+                local start = findStart + 1
+                local endPos = findEnd - 1
+                local color = getColorForOperator(op)
+                for i = start, endPos do
+                    if tableContents[i] then
+                        tableContents[i].Color = color
+                    end
+                end
+            end
+        end
+    end
+    
+    -- تلوين الدوال
+    for findStart, findEnd in gfind(str, "[%a_][%a%d_]*%s*%(") do
+        if not isOffLimits(findStart) and not isOffLimits(findEnd) then
+            local funcName = str:sub(findStart, findEnd - 1)
+            local color = getColorForKeyword(funcName)
+            for i = findStart, findEnd - 1 do
+                if tableContents[i] then
+                    tableContents[i].Color = color
+                end
+            end
+        end
+    end
+    
+    -- عرض النص الملون
+    renderDisplay()
+end
+
+-- ============================================================
+-- عرض النص الملون
+-- ============================================================
+
+function renderDisplay()
+    local lastColor
+    local lineStr = ""
+    local rawStr = ""
+    largestX = 0
+    line = 1
+    
+    for i = 1, #tableContents + 1 do
+        local char = tableContents[i]
+        
+        if i == #tableContents + 1 or (char and char.Char == "\n") then
+            lineStr = lineStr .. (lastColor and "</font>" or "")
+            
+            local x = TextService:GetTextSize(rawStr, textSize, font, Vector2.new(math.huge, math.huge)).X + 60
+            if x > largestX then
+                largestX = x
+            end
+            
+            local lineText = Instance.new("TextLabel")
+            lineText.TextXAlignment = Enum.TextXAlignment.Left
+            lineText.TextYAlignment = Enum.TextYAlignment.Top
+            lineText.Position = UDim2.new(0, 0, 0, line * lineSpace - lineSpace / 2)
+            lineText.Size = UDim2.new(0, x, 0, textSize)
+            lineText.RichText = true
+            lineText.Font = font
+            lineText.TextSize = textSize
+            lineText.BackgroundTransparency = 1
+            lineText.Text = lineStr
+            lineText.Parent = textFrame
+            
+            if i ~= #tableContents + 1 then
+                local lineNumber = Instance.new("TextLabel")
+                lineNumber.Text = tostring(line)
+                lineNumber.Font = font
+                lineNumber.TextSize = textSize
+                lineNumber.Size = UDim2.new(1, 0, 0, lineSpace)
+                lineNumber.TextXAlignment = Enum.TextXAlignment.Right
+                lineNumber.TextColor3 = ColorSystem.base.lineNumber
+                lineNumber.Position = UDim2.new(0, 0, 0, line * lineSpace - lineSpace / 2)
+                lineNumber.BackgroundTransparency = 1
+                lineNumber.Parent = lineNumbersFrame
+            end
+            
+            lineStr = ""
+            rawStr = ""
+            lastColor = nil
+            line = line + 1
+            
+            if line % 5 == 0 then
+                RunService.Heartbeat:Wait()
+            end
+        elseif char then
+            if char.Char == " " then
+                lineStr = lineStr .. char.Char
+                rawStr = rawStr .. char.Char
+            elseif char.Char == "\t" then
+                lineStr = lineStr .. string.rep(" ", 4)
+                rawStr = rawStr .. char.Char
+            else
+                if char.Color == lastColor then
+                    lineStr = lineStr .. autoEscape(char.Char)
+                else
+                    lineStr = lineStr .. string.format(
+                        '%s<font color="rgb(%d,%d,%d)">',
+                        lastColor and "</font>" or "",
+                        char.Color.R * 255,
+                        char.Color.G * 255,
+                        char.Color.B * 255
+                    )
+                    lineStr = lineStr .. autoEscape(char.Char)
+                    lastColor = char.Color
+                end
+                rawStr = rawStr .. char.Char
+            end
+        end
+    end
+    
+    updateCanvasSize()
+end
+
+-- ============================================================
+-- دوال الواجهة
+-- ============================================================
+
+function updateCanvasSize()
+    scrollingFrame.CanvasSize = UDim2.new(0, largestX + 20, 0, line * lineSpace + 20)
+end
+
+function onFrameSizeChange()
+    local newSize = parentFrame.AbsoluteSize
+    scrollingFrame.Size = UDim2.new(0, newSize.X, 0, newSize.Y)
+end
+
+function updateZIndex()
+    for _, v in next, parentFrame:GetDescendants() do
+        if v:IsA("GuiObject") then
+            v.ZIndex = parentFrame.ZIndex
+        end
+    end
+end
+
+-- ============================================================
+-- الدوال العامة
+-- ============================================================
+
+function Highlight:init(frame)
+    if typeof(frame) == "Instance" and frame:IsA("Frame") then
+        frame:ClearAllChildren()
+        
+        parentFrame = frame
+        scrollingFrame = Instance.new("ScrollingFrame")
+        textFrame = Instance.new("Frame")
+        lineNumbersFrame = Instance.new("Frame")
+        
+        scrollingFrame.Size = UDim2.new(1, 0, 1, 0)
+        scrollingFrame.BackgroundColor3 = ColorSystem.base.background
+        scrollingFrame.BorderSizePixel = 0
+        scrollingFrame.ScrollBarThickness = 4
+        scrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+        
+        textFrame.Size = UDim2.new(1, -45, 1, 0)
+        textFrame.Position = UDim2.new(0, 45, 0, 0)
+        textFrame.BackgroundTransparency = 1
+        
+        lineNumbersFrame.Size = UDim2.new(0, 30, 1, 0)
+        lineNumbersFrame.BackgroundTransparency = 1
+        lineNumbersFrame.BackgroundColor3 = Color3.fromRGB(35, 37, 45)
+        
+        textFrame.Parent = scrollingFrame
+        lineNumbersFrame.Parent = scrollingFrame
+        scrollingFrame.Parent = parentFrame
+        
+        renderAdvanced()
+        
+        parentFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(onFrameSizeChange)
+        parentFrame:GetPropertyChangedSignal("ZIndex"):Connect(updateZIndex)
+    else
+        error("Initialization error: argument " .. typeof(frame) .. " is not a Frame Instance")
+    end
+end
+
+function Highlight:setRaw(raw)
+    raw = raw .. "\n"
+    tableContents = {}
+    for i = 1, #raw do
+        table.insert(tableContents, {
+            Char = raw:sub(i, i),
+            Color = Color3.fromRGB(220, 220, 255),
+        })
+        if i % 1000 == 0 then
+            RunService.Heartbeat:Wait()
+        end
+    end
+    renderAdvanced()
+end
+
+function Highlight:getRaw()
+    local result = ""
+    for _, char in next, tableContents do
+        result = result .. char.Char
+    end
+    return result
+end
+
+function Highlight:getString()
+    local result = ""
+    for _, char in next, tableContents do
+        result = result .. char.Char:sub(1, 1)
+    end
+    return result
+end
+
+function Highlight:getTable()
+    return tableContents
+end
+
+function Highlight:getSize()
+    return #tableContents
+end
+
+function Highlight:getLine(lineNum)
+    local currentLine = 0
+    local result = ""
+    for _, v in next, tableContents do
+        if v.Char == "\n" then
+            currentLine = currentLine + 1
+        end
+        if currentLine == lineNum and v.Char ~= "\n" then
+            result = result .. v.Char
+        end
+        if currentLine > lineNum then
+            break
+        end
+    end
+    return result
+end
+
+-- ============================================================
+-- Constructor
+-- ============================================================
+
+local constructor = {}
+
+function constructor.new(...)
+    local class = Highlight
+    local new = {}
+    class.__index = class
+    setmetatable(new, class)
+    new:init(...)
+    return new
+end
+
+return constructor    String = Color3.fromRGB(152, 195, 121),       -- أخضر
     StringEscape = Color3.fromRGB(200, 150, 100), -- برتقالي (للهروب)
     
     -- الأرقام
