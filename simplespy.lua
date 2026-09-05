@@ -1,8 +1,5 @@
 --[[
-    highlight.lua - Syntax Highlighter بسيط ومطور
-    - تلوين ذكي للكود
-    - دعم جميع أنواع الـ Lua
-    - أداء محسن
+    highlight.lua - Syntax Highlighter بألوان جديدة
 ]]
 
 local cloneref = cloneref or function(...) return ... end
@@ -29,22 +26,68 @@ local textSize = 14
 local offLimits = {}
 
 -- ============================================================
--- الألوان (واضحة وجميلة)
+-- 🎨 الألوان الجديدة (لوحة مختلفة تماماً)
 -- ============================================================
 
 local Colors = {
-    background = Color3.fromRGB(40, 44, 52),
-    lineNumber = Color3.fromRGB(148, 148, 148),
-    default = Color3.fromRGB(224, 108, 117),
-    keyword = Color3.fromRGB(187, 85, 255),      -- بنفسجي
-    function_ = Color3.fromRGB(97, 175, 239),    -- أزرق
-    string = Color3.fromRGB(152, 195, 121),      -- أخضر
-    number = Color3.fromRGB(209, 154, 102),      -- برتقالي
-    comment = Color3.fromRGB(148, 148, 148),     -- رمادي
-    object = Color3.fromRGB(229, 192, 123),      -- ذهبي
-    operator = Color3.fromRGB(200, 200, 200),    -- أبيض رمادي
-    boolean = Color3.fromRGB(209, 154, 102),     -- برتقالي
-    variable = Color3.fromRGB(220, 220, 255),    -- أبيض مائل للأزرق
+    -- الخلفية
+    background = Color3.fromRGB(20, 22, 30),        -- خلفية داكنة جداً
+    
+    -- الألوان الأساسية
+    lineNumber = Color3.fromRGB(100, 110, 130),     -- رمادي مائل للأزرق
+    
+    -- الكلمات المفتاحية (Keywords)
+    keyword = Color3.fromRGB(255, 150, 50),         -- برتقالي ناري 🔥
+    keywordControl = Color3.fromRGB(255, 100, 100), -- أحمر نيون
+    keywordCondition = Color3.fromRGB(255, 200, 80),-- ذهبي
+    
+    -- الدوال
+    function_ = Color3.fromRGB(80, 220, 255),       -- سماوي نيون 🌊
+    functionCall = Color3.fromRGB(100, 200, 255),   -- أزرق فاتح
+    
+    -- النصوص
+    string = Color3.fromRGB(255, 150, 200),         -- وردي نيون 🌸
+    stringEscape = Color3.fromRGB(255, 200, 100),   -- ذهبي
+    
+    -- الأرقام
+    number = Color3.fromRGB(100, 255, 150),         -- أخضر نيون 🌿
+    numberHex = Color3.fromRGB(150, 255, 200),      -- أخضر فاتح
+    
+    -- التعليقات
+    comment = Color3.fromRGB(80, 90, 110),          -- رمادي غامق
+    commentDoc = Color3.fromRGB(120, 140, 180),     -- أزرق رمادي
+    commentTodo = Color3.fromRGB(255, 200, 80),     -- ذهبي (لـ TODO)
+    
+    -- المعاملات
+    operator = Color3.fromRGB(200, 150, 255),       -- بنفسجي نيون 💜
+    assignment = Color3.fromRGB(255, 150, 255),     -- وردي بنفسجي
+    comparison = Color3.fromRGB(255, 200, 100),     -- ذهبي
+    
+    -- القيم
+    boolean = Color3.fromRGB(255, 100, 150),        -- وردي أحمر
+    nil_ = Color3.fromRGB(150, 100, 200),           -- بنفسجي غامق
+    self = Color3.fromRGB(255, 200, 100),           -- ذهبي
+    
+    -- الكائنات
+    object = Color3.fromRGB(255, 200, 150),         -- برتقالي فاتح
+    table = Color3.fromRGB(200, 150, 255),          -- بنفسجي فاتح
+    instance = Color3.fromRGB(100, 200, 255),       -- أزرق سماوي
+    
+    -- المتغيرات
+    variable = Color3.fromRGB(220, 220, 255),       -- أبيض مائل للأزرق
+    localVariable = Color3.fromRGB(200, 210, 255),  -- أزرق فاتح
+    globalVariable = Color3.fromRGB(180, 200, 255), -- أزرق رمادي
+    
+    -- علامات الترقيم
+    parenthesis = Color3.fromRGB(200, 200, 220),    -- رمادي فاتح
+    bracket = Color3.fromRGB(200, 200, 220),
+    brace = Color3.fromRGB(200, 200, 220),
+    comma = Color3.fromRGB(200, 200, 220),
+    dot = Color3.fromRGB(200, 200, 220),
+    colon = Color3.fromRGB(200, 200, 220),
+    
+    -- الافتراضي
+    default = Color3.fromRGB(200, 200, 220),        -- رمادي فاتح
 }
 
 -- ============================================================
@@ -126,7 +169,7 @@ function renderComments()
     local str = Highlight:getRaw()
     local step = 1
     
-    -- تلوين التعليقات العادية
+    -- التعليقات العادية
     for commentStart, commentEnd in gfind(str, "%-%-[^\n]+") do
         if step % 1000 == 0 then
             RunService.Heartbeat:Wait()
@@ -134,16 +177,23 @@ function renderComments()
         step = step + 1
         
         if not isOffLimits(commentStart) then
+            local color = Colors.comment
+            -- TODO و FIXME
+            local commentText = str:sub(commentStart, commentEnd)
+            if commentText:match("TODO") or commentText:match("FIXME") then
+                color = Colors.commentTodo
+            end
+            
             for i = commentStart, commentEnd do
                 table.insert(offLimits, {commentStart, commentEnd})
                 if tableContents[i] then
-                    tableContents[i].Color = Colors.comment
+                    tableContents[i].Color = color
                 end
             end
         end
     end
     
-    -- تلوين التعليقات الطويلة
+    -- التعليقات الطويلة
     for commentStart, commentEnd in gfind(str, "%-%-%[%[[^%]%]]+%]?%]?") do
         if step % 1000 == 0 then
             RunService.Heartbeat:Wait()
@@ -178,6 +228,10 @@ function renderStrings()
             table.insert(offLimits, {stringStart, i})
         elseif inString then
             char.Color = Colors.string
+            -- تلوين أحرف الهروب
+            if char.Char == "\\" and tableContents[i + 1] then
+                tableContents[i + 1].Color = Colors.stringEscape
+            end
         end
     end
 end
@@ -192,10 +246,8 @@ function render()
     lineNumbersFrame:ClearAllChildren()
     
     -- ============================================================
-    -- التلوين حسب النوع
+    -- 1. الكلمات المفتاحية
     -- ============================================================
-    
-    -- 1. الكلمات المفتاحية (if, for, while, etc.)
     local keywords = {
         "function", "local", "if", "then", "else", "elseif", "end",
         "for", "while", "do", "repeat", "until",
@@ -203,22 +255,46 @@ function render()
         "and", "or", "not"
     }
     
+    local controlKeywords = {"return", "break", "continue", "goto"}
+    local conditionKeywords = {"then", "else", "elseif", "do", "repeat", "until"}
+    
     for _, keyword in next, keywords do
         local pattern = "[^%w_](" .. keyword .. ")[^%w_]"
         for findStart, findEnd in gfind(Highlight:getRaw(), pattern) do
             if not isOffLimits(findStart) and not isOffLimits(findEnd) then
                 local start = findStart + 1
                 local endPos = findEnd - 1
+                local color = Colors.keyword
+                
+                -- تحديد نوع الكلمة المفتاحية
+                for _, c in next, controlKeywords do
+                    if keyword == c then
+                        color = Colors.keywordControl
+                        break
+                    end
+                end
+                for _, c in next, conditionKeywords do
+                    if keyword == c then
+                        color = Colors.keywordCondition
+                        break
+                    end
+                end
+                if keyword == "self" then
+                    color = Colors.self
+                end
+                
                 for i = start, endPos do
                     if tableContents[i] then
-                        tableContents[i].Color = Colors.keyword
+                        tableContents[i].Color = color
                     end
                 end
             end
         end
     end
     
+    -- ============================================================
     -- 2. الدوال
+    -- ============================================================
     local functions = {
         "[^%w_]([%a_][%a%d_]*)%s*%(",
         "^([%a_][%a%d_]*)%s*%(",
@@ -226,18 +302,23 @@ function render()
     }
     highlightPattern(functions, Colors.function_)
     
+    -- ============================================================
     -- 3. الأرقام
+    -- ============================================================
     local numbers = {
         "[^%w_](%d+[eE]?%d*)",
         "[^%w_](%.%d+[eE]?%d*)",
         "[^%w_](%d+%.%d+[eE]?%d*)",
         "^(%d+[eE]?%d*)",
         "^(%.%d+[eE]?%d*)",
-        "^(%d+%.%d+[eE]?%d*)"
+        "^(%d+%.%d+[eE]?%d*)",
+        "0x[%da-fA-F]+"  -- أرقام سداسية
     }
     highlightPattern(numbers, Colors.number)
     
-    -- 4. القيم المنطقية (true, false, nil)
+    -- ============================================================
+    -- 4. القيم المنطقية
+    -- ============================================================
     local booleans = {
         "[^%w_](true)", "^(true)",
         "[^%w_](false)", "^(false)",
@@ -245,23 +326,54 @@ function render()
     }
     highlightPattern(booleans, Colors.boolean)
     
-    -- 5. الكائنات (object:method)
+    -- ============================================================
+    -- 5. الكائنات
+    -- ============================================================
     local objects = {
         "[^%w_:]([%a_][%a%d_]*):",
         "^([%a_][%a%d_]*):"
     }
     highlightPattern(objects, Colors.object)
     
+    -- ============================================================
     -- 6. المعاملات
+    -- ============================================================
     local operators = {
-        "[^_%s%w=>~<%-%+%*]", ">", "~", "<", "%-", "%+", "=", "%*"
+        "[^_%s%w=>~<%-%+%*]", ">", "~", "<", "%-", "%+", "=", "%*",
+        "==", "~=", "<=", ">="
     }
     highlightPattern(operators, Colors.operator)
     
-    -- 7. التعليقات
+    -- ============================================================
+    -- 7. علامات الترقيم
+    -- ============================================================
+    for i, char in next, tableContents do
+        if not isOffLimits(i) then
+            local c = char.Char
+            if c == "(" or c == ")" then
+                char.Color = Colors.parenthesis
+            elseif c == "[" or c == "]" then
+                char.Color = Colors.bracket
+            elseif c == "{" or c == "}" then
+                char.Color = Colors.brace
+            elseif c == "," then
+                char.Color = Colors.comma
+            elseif c == "." then
+                char.Color = Colors.dot
+            elseif c == ":" then
+                char.Color = Colors.colon
+            end
+        end
+    end
+    
+    -- ============================================================
+    -- 8. التعليقات
+    -- ============================================================
     renderComments()
     
-    -- 8. النصوص
+    -- ============================================================
+    -- 9. النصوص
+    -- ============================================================
     renderStrings()
     
     -- ============================================================
