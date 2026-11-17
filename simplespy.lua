@@ -1,107 +1,117 @@
 --[[
-    highlight.lua - Syntax Highlighter بألوان جديدة
+    Highlight.lua - Pro Syntax Highlighter
+    Rich colors • Fast • Clean
 ]]
 
 local cloneref = cloneref or function(...) return ... end
 local TextService = cloneref(game:GetService("TextService"))
 local RunService = cloneref(game:GetService("RunService"))
 
---- @class Highlight
 local Highlight = {}
 
 -- ============================================================
--- المتغيرات الأساسية
+-- State
 -- ============================================================
-
-local parentFrame
-local scrollingFrame
-local textFrame
-local lineNumbersFrame
+local parentFrame, scrollingFrame, textFrame, lineNumbersFrame
 local tableContents = {}
-local line = 0
-local largestX = 0
-local lineSpace = 15
-local font = Enum.Font.Ubuntu
-local textSize = 14
+local line, largestX = 0, 0
+local lineSpace, font, textSize = 15, Enum.Font.Code, 13
 local offLimits = {}
 
 -- ============================================================
--- 🎨 الألوان الجديدة (لوحة مختلفة تماماً)
+-- Colors — One Dark Pro + Catppuccin inspired
 -- ============================================================
+local C = {
+    bg              = Color3.fromRGB(18, 18, 24),
+    lineNum         = Color3.fromRGB(68, 72, 88),
 
-local Colors = {
-    -- الخلفية
-    background = Color3.fromRGB(20, 22, 30),        -- خلفية داكنة جداً
-    
-    -- الألوان الأساسية
-    lineNumber = Color3.fromRGB(100, 110, 130),     -- رمادي مائل للأزرق
-    
-    -- الكلمات المفتاحية (Keywords)
-    keyword = Color3.fromRGB(255, 150, 50),         -- برتقالي ناري 🔥
-    keywordControl = Color3.fromRGB(255, 100, 100), -- أحمر نيون
-    keywordCondition = Color3.fromRGB(255, 200, 80),-- ذهبي
-    
-    -- الدوال
-    function_ = Color3.fromRGB(80, 220, 255),       -- سماوي نيون 🌊
-    functionCall = Color3.fromRGB(100, 200, 255),   -- أزرق فاتح
-    
-    -- النصوص
-    string = Color3.fromRGB(255, 150, 200),         -- وردي نيون 🌸
-    stringEscape = Color3.fromRGB(255, 200, 100),   -- ذهبي
-    
-    -- الأرقام
-    number = Color3.fromRGB(100, 255, 150),         -- أخضر نيون 🌿
-    numberHex = Color3.fromRGB(150, 255, 200),      -- أخضر فاتح
-    
-    -- التعليقات
-    comment = Color3.fromRGB(80, 90, 110),          -- رمادي غامق
-    commentDoc = Color3.fromRGB(120, 140, 180),     -- أزرق رمادي
-    commentTodo = Color3.fromRGB(255, 200, 80),     -- ذهبي (لـ TODO)
-    
-    -- المعاملات
-    operator = Color3.fromRGB(200, 150, 255),       -- بنفسجي نيون 💜
-    assignment = Color3.fromRGB(255, 150, 255),     -- وردي بنفسجي
-    comparison = Color3.fromRGB(255, 200, 100),     -- ذهبي
-    
-    -- القيم
-    boolean = Color3.fromRGB(255, 100, 150),        -- وردي أحمر
-    nil_ = Color3.fromRGB(150, 100, 200),           -- بنفسجي غامق
-    self = Color3.fromRGB(255, 200, 100),           -- ذهبي
-    
-    -- الكائنات
-    object = Color3.fromRGB(255, 200, 150),         -- برتقالي فاتح
-    table = Color3.fromRGB(200, 150, 255),          -- بنفسجي فاتح
-    instance = Color3.fromRGB(100, 200, 255),       -- أزرق سماوي
-    
-    -- المتغيرات
-    variable = Color3.fromRGB(220, 220, 255),       -- أبيض مائل للأزرق
-    localVariable = Color3.fromRGB(200, 210, 255),  -- أزرق فاتح
-    globalVariable = Color3.fromRGB(180, 200, 255), -- أزرق رمادي
-    
-    -- علامات الترقيم
-    parenthesis = Color3.fromRGB(200, 200, 220),    -- رمادي فاتح
-    bracket = Color3.fromRGB(200, 200, 220),
-    brace = Color3.fromRGB(200, 200, 220),
-    comma = Color3.fromRGB(200, 200, 220),
-    dot = Color3.fromRGB(200, 200, 220),
-    colon = Color3.fromRGB(200, 200, 220),
-    
-    -- الافتراضي
-    default = Color3.fromRGB(200, 200, 220),        -- رمادي فاتح
+    -- Keywords
+    kw              = Color3.fromRGB(198, 120, 221),  -- purple
+    kwControl       = Color3.fromRGB(224, 108, 117),  -- red (return/break)
+    kwCondition     = Color3.fromRGB(229, 192, 123),  -- gold (then/else)
+    kwLoop          = Color3.fromRGB(86, 182, 194),   -- cyan (for/while)
+    kwLocal         = Color3.fromRGB(198, 120, 221),
+    kwFunction      = Color3.fromRGB(97, 175, 239),
+
+    -- Functions
+    funcDef         = Color3.fromRGB(97, 175, 239),   -- blue
+    funcCall        = Color3.fromRGB(97, 175, 239),
+    method          = Color3.fromRGB(86, 182, 194),   -- cyan methods
+
+    -- Strings
+    str             = Color3.fromRGB(152, 195, 121),  -- green
+    strEscape       = Color3.fromRGB(209, 154, 102),  -- orange
+    strInterp       = Color3.fromRGB(229, 192, 123),  -- gold
+
+    -- Numbers
+    num             = Color3.fromRGB(209, 154, 102),
+    numHex          = Color3.fromRGB(224, 175, 104),
+    numFloat        = Color3.fromRGB(209, 154, 102),
+
+    -- Comments
+    comment         = Color3.fromRGB(92, 99, 112),
+    commentDoc      = Color3.fromRGB(110, 125, 150),
+    commentTodo     = Color3.fromRGB(229, 192, 123),
+    commentWarn     = Color3.fromRGB(224, 108, 117),
+
+    -- Operators
+    op              = Color3.fromRGB(86, 182, 194),
+    opAssign        = Color3.fromRGB(198, 120, 221),
+    opCompare       = Color3.fromRGB(86, 182, 194),
+    opLogic         = Color3.fromRGB(198, 120, 221),
+    opArith         = Color3.fromRGB(171, 178, 191),
+
+    -- Literals
+    bool            = Color3.fromRGB(209, 154, 102),
+    nil_            = Color3.fromRGB(190, 80, 70),
+    self_           = Color3.fromRGB(224, 108, 117),
+
+    -- Types / Builtins
+    builtin         = Color3.fromRGB(229, 192, 123),  -- gold
+    type_           = Color3.fromRGB(86, 182, 194),
+    constant        = Color3.fromRGB(209, 154, 102),
+
+    -- Roblox specific
+    rbxService      = Color3.fromRGB(97, 175, 239),
+    rbxEnum         = Color3.fromRGB(198, 120, 221),
+    rbxInstance     = Color3.fromRGB(86, 182, 194),
+    rbxEvent        = Color3.fromRGB(224, 108, 117),
+    rbxProp         = Color3.fromRGB(171, 178, 191),
+
+    -- Variables
+    var             = Color3.fromRGB(171, 178, 191),
+    varLocal        = Color3.fromRGB(171, 178, 191),
+    varGlobal       = Color3.fromRGB(224, 175, 104),
+    varArg          = Color3.fromRGB(152, 195, 121),
+
+    -- Punctuation
+    paren           = Color3.fromRGB(171, 178, 191),
+    bracket         = Color3.fromRGB(171, 178, 191),
+    brace           = Color3.fromRGB(171, 178, 191),
+    comma           = Color3.fromRGB(140, 145, 160),
+    dot             = Color3.fromRGB(140, 145, 160),
+    colon           = Color3.fromRGB(140, 145, 160),
+    semicolon       = Color3.fromRGB(140, 145, 160),
+
+    -- Special
+    annotation      = Color3.fromRGB(198, 120, 221),
+    label           = Color3.fromRGB(229, 192, 123),
+    attribute       = Color3.fromRGB(86, 182, 194),
+
+    default         = Color3.fromRGB(171, 178, 191),
 }
 
 -- ============================================================
--- دوال مساعدة
+-- Helpers
 -- ============================================================
-
-function gfind(str, pattern)
+local function gfind(str, pattern)
     return coroutine.wrap(function()
         local start = 0
         while true do
-            local findStart, findEnd = str:find(pattern, start)
-            if findStart and findEnd ~= #str then
-                start = findEnd + 1
-                coroutine.yield(findStart, findEnd)
+            local s, e = str:find(pattern, start)
+            if s and e ~= #str then
+                start = e + 1
+                coroutine.yield(s, e)
             else
                 return
             end
@@ -109,530 +119,449 @@ function gfind(str, pattern)
     end)
 end
 
-function isOffLimits(index)
+local function isOff(i)
     for _, v in next, offLimits do
-        if index >= v[1] and index <= v[2] then
-            return true
-        end
+        if i >= v[1] and i <= v[2] then return true end
     end
     return false
 end
 
-function autoEscape(s)
-    local result = ""
+local function esc(s)
+    local m = {["<"]="&lt;",[">"]="&gt;",['"']="&quot;",["'"]="&apos;",["&"]="&amp;"}
+    local r = ""
     for i = 1, #s do
-        local char = s:sub(i, i)
-        if char == "<" then
-            result = result .. "&lt;"
-        elseif char == ">" then
-            result = result .. "&gt;"
-        elseif char == '"' then
-            result = result .. "&quot;"
-        elseif char == "'" then
-            result = result .. "&apos;"
-        elseif char == "&" then
-            result = result .. "&amp;"
-        else
-            result = result .. char
+        local c = s:sub(i,i)
+        r = r .. (m[c] or c)
+    end
+    return r
+end
+
+local function setColor(from, to, color)
+    for i = from, to do
+        if tableContents[i] then
+            tableContents[i].Color = color
         end
     end
-    return result
+end
+
+local function markOff(from, to)
+    table.insert(offLimits, {from, to})
 end
 
 -- ============================================================
--- دوال التلوين الرئيسية
+-- Pattern highlight
 -- ============================================================
-
-function highlightPattern(patternArray, color)
+local function hl(patterns, color, capture)
     local str = Highlight:getRaw()
     local step = 1
-    
-    for _, pattern in next, patternArray do
-        for findStart, findEnd in gfind(str, pattern) do
-            if step % 1000 == 0 then
-                RunService.Heartbeat:Wait()
-            end
-            step = step + 1
-            
-            if not isOffLimits(findStart) and not isOffLimits(findEnd) then
-                for i = findStart, findEnd do
-                    if tableContents[i] then
-                        tableContents[i].Color = color
-                    end
+    for _, pat in next, patterns do
+        for s, e in gfind(str, pat) do
+            step += 1
+            if step % 800 == 0 then RunService.Heartbeat:Wait() end
+            if not isOff(s) and not isOff(e) then
+                local a, b = s, e
+                if capture then
+                    a = s + 1
+                    b = e - 1
                 end
+                setColor(a, b, color)
             end
         end
     end
 end
 
-function renderComments()
+-- ============================================================
+-- Comments
+-- ============================================================
+local function renderComments()
     local str = Highlight:getRaw()
     local step = 1
-    
-    -- التعليقات العادية
-    for commentStart, commentEnd in gfind(str, "%-%-[^\n]+") do
-        if step % 1000 == 0 then
-            RunService.Heartbeat:Wait()
-        end
-        step = step + 1
-        
-        if not isOffLimits(commentStart) then
-            local color = Colors.comment
-            -- TODO و FIXME
-            local commentText = str:sub(commentStart, commentEnd)
-            if commentText:match("TODO") or commentText:match("FIXME") then
-                color = Colors.commentTodo
-            end
-            
-            for i = commentStart, commentEnd do
-                table.insert(offLimits, {commentStart, commentEnd})
-                if tableContents[i] then
-                    tableContents[i].Color = color
-                end
-            end
-        end
-    end
-    
-    -- التعليقات الطويلة
-    for commentStart, commentEnd in gfind(str, "%-%-%[%[[^%]%]]+%]?%]?") do
-        if step % 1000 == 0 then
-            RunService.Heartbeat:Wait()
-        end
-        step = step + 1
-        
-        if not isOffLimits(commentStart) then
-            for i = commentStart, commentEnd do
-                table.insert(offLimits, {commentStart, commentEnd})
-                if tableContents[i] then
-                    tableContents[i].Color = Colors.comment
-                end
-            end
-        end
-    end
-end
 
-function renderStrings()
-    local inString = false
-    local stringStart = 0
-    local stringChar = ""
-    
-    for i, char in next, tableContents do
-        if not inString and (char.Char == '"' or char.Char == "'") and not isOffLimits(i) then
-            inString = true
-            stringStart = i
-            stringChar = char.Char
-            char.Color = Colors.string
-        elseif inString and char.Char == stringChar and not isOffLimits(i) then
-            inString = false
-            char.Color = Colors.string
-            table.insert(offLimits, {stringStart, i})
-        elseif inString then
-            char.Color = Colors.string
-            -- تلوين أحرف الهروب
-            if char.Char == "\\" and tableContents[i + 1] then
-                tableContents[i + 1].Color = Colors.stringEscape
+    -- single line
+    for s, e in gfind(str, "%-%-[^\n]*") do
+        step += 1
+        if step % 800 == 0 then RunService.Heartbeat:Wait() end
+        if not isOff(s) then
+            local txt = str:sub(s, e)
+            local col = C.comment
+            if txt:match("[Tt][Oo][Dd][Oo]") or txt:match("[Ff][Ii][Xx][Mm][Ee]") then
+                col = C.commentTodo
+            elseif txt:match("[Ww][Aa][Rr][Nn]") or txt:match("[Hh][Aa][Cc][Kk]") then
+                col = C.commentWarn
+            elseif txt:match("%-%-%-") or txt:match("@param") or txt:match("@return") then
+                col = C.commentDoc
             end
+            setColor(s, e, col)
+            markOff(s, e)
+        end
+    end
+
+    -- block
+    for s, e in gfind(str, "%-%-%[%[.-%]%]") do
+        step += 1
+        if step % 800 == 0 then RunService.Heartbeat:Wait() end
+        if not isOff(s) then
+            setColor(s, e, C.comment)
+            markOff(s, e)
         end
     end
 end
 
 -- ============================================================
--- الدالة الرئيسية للتلوين
+-- Strings
 -- ============================================================
+local function renderStrings()
+    local inStr, start, ch = false, 0, ""
+    for i, c in next, tableContents do
+        if not inStr and (c.Char == '"' or c.Char == "'") and not isOff(i) then
+            inStr, start, ch = true, i, c.Char
+            c.Color = C.str
+        elseif inStr and c.Char == ch and not isOff(i) then
+            inStr = false
+            c.Color = C.str
+            markOff(start, i)
+        elseif inStr then
+            c.Color = C.str
+            if c.Char == "\\" and tableContents[i+1] then
+                tableContents[i+1].Color = C.strEscape
+            end
+        end
+    end
 
+    -- long strings [[ ]]
+    local str = Highlight:getRaw()
+    for s, e in gfind(str, "%[%[.-%]%]") do
+        if not isOff(s) then
+            setColor(s, e, C.str)
+            markOff(s, e)
+        end
+    end
+end
+
+-- ============================================================
+-- Main render
+-- ============================================================
 function render()
     offLimits = {}
     textFrame:ClearAllChildren()
     lineNumbersFrame:ClearAllChildren()
-    
-    -- ============================================================
-    -- 1. الكلمات المفتاحية
-    -- ============================================================
-    local keywords = {
-        "function", "local", "if", "then", "else", "elseif", "end",
-        "for", "while", "do", "repeat", "until",
-        "return", "break", "continue", "goto",
-        "and", "or", "not"
+
+    local raw = Highlight:getRaw()
+
+    -- ========== KEYWORDS ==========
+    local kwMap = {
+        -- control
+        ["return"] = C.kwControl, ["break"] = C.kwControl,
+        ["continue"] = C.kwControl, ["goto"] = C.kwControl,
+        -- condition
+        ["if"] = C.kwCondition, ["then"] = C.kwCondition,
+        ["else"] = C.kwCondition, ["elseif"] = C.kwCondition,
+        ["until"] = C.kwCondition,
+        -- loop
+        ["for"] = C.kwLoop, ["while"] = C.kwLoop,
+        ["repeat"] = C.kwLoop, ["do"] = C.kwLoop,
+        -- structure
+        ["function"] = C.kwFunction, ["local"] = C.kwLocal,
+        ["end"] = C.kw, ["and"] = C.opLogic, ["or"] = C.opLogic,
+        ["not"] = C.opLogic, ["in"] = C.kw,
     }
-    
-    local controlKeywords = {"return", "break", "continue", "goto"}
-    local conditionKeywords = {"then", "else", "elseif", "do", "repeat", "until"}
-    
-    for _, keyword in next, keywords do
-        local pattern = "[^%w_](" .. keyword .. ")[^%w_]"
-        for findStart, findEnd in gfind(Highlight:getRaw(), pattern) do
-            if not isOffLimits(findStart) and not isOffLimits(findEnd) then
-                local start = findStart + 1
-                local endPos = findEnd - 1
-                local color = Colors.keyword
-                
-                -- تحديد نوع الكلمة المفتاحية
-                for _, c in next, controlKeywords do
-                    if keyword == c then
-                        color = Colors.keywordControl
-                        break
-                    end
-                end
-                for _, c in next, conditionKeywords do
-                    if keyword == c then
-                        color = Colors.keywordCondition
-                        break
-                    end
-                end
-                if keyword == "self" then
-                    color = Colors.self
-                end
-                
-                for i = start, endPos do
-                    if tableContents[i] then
-                        tableContents[i].Color = color
-                    end
-                end
+
+    for word, col in next, kwMap do
+        for s, e in gfind(raw, "[^%w_](" .. word .. ")[^%w_]") do
+            if not isOff(s) and not isOff(e) then
+                setColor(s+1, e-1, col)
+            end
+        end
+        -- start of line
+        for s, e in gfind(raw, "^(" .. word .. ")[^%w_]") do
+            if not isOff(s) then setColor(s, e-1, col) end
+        end
+    end
+
+    -- ========== SELF ==========
+    hl({"[^%w_](self)[^%w_]", "^(self)[^%w_]"}, C.self_, true)
+
+    -- ========== BOOLEANS / NIL ==========
+    hl({"[^%w_](true)[^%w_]", "^(true)[^%w_]",
+        "[^%w_](false)[^%w_]", "^(false)[^%w_]"}, C.bool, true)
+    hl({"[^%w_](nil)[^%w_]", "^(nil)[^%w_]"}, C.nil_, true)
+
+    -- ========== BUILTINS ==========
+    local builtins = {
+        "print","warn","error","assert","type","typeof","tostring","tonumber",
+        "pairs","ipairs","next","select","unpack","rawget","rawset","rawequal",
+        "setmetatable","getmetatable","newproxy","pcall","xpcall","ypcall",
+        "spawn","delay","wait","tick","time","typeof","require","loadstring",
+        "getfenv","setfenv","getinfo","traceback","collectgarbage",
+        "Instance","Vector3","Vector2","CFrame","Color3","UDim2","UDim",
+        "Ray","Region3","BrickColor","TweenInfo","NumberRange","NumberSequence",
+        "ColorSequence","Rect","Enum","game","workspace","script","shared",
+        "plugin","_G","_VERSION"
+    }
+    for _, b in next, builtins do
+        for s, e in gfind(raw, "[^%w_](" .. b .. ")[^%w_]") do
+            if not isOff(s) then setColor(s+1, e-1, C.builtin) end
+        end
+    end
+
+    -- ========== ROBLOX SERVICES ==========
+    local services = {
+        "Players","RunService","UserInputService","TweenService","HttpService",
+        "ReplicatedStorage","ServerStorage","ServerScriptService","StarterGui",
+        "StarterPlayer","Lighting","SoundService","MarketplaceService",
+        "TeleportService","DataStoreService","MessagingService","PathfindingService",
+        "CollectionService","ContextActionService","GuiService","TextService",
+        "ContentProvider","InsertService","Chat","Teams","BadgeService"
+    }
+    for _, s in next, services do
+        for a, b in gfind(raw, "[^%w_](" .. s .. ")[^%w_]") do
+            if not isOff(a) then setColor(a+1, b-1, C.rbxService) end
+        end
+    end
+
+    -- ========== ENUMS ==========
+    hl({"Enum%.[%w_]+%.[%w_]+", "Enum%.[%w_]+"}, C.rbxEnum)
+
+    -- ========== FUNCTIONS calls ==========
+    hl({
+        "[^%w_]([%a_][%w_]*)%s*%(",
+        "^([%a_][%w_]*)%s*%(",
+    }, C.funcCall, true)
+
+    -- Methods  :name(
+    hl({":([%a_][%w_]*)%s*%("}, C.method, true)
+
+    -- ========== NUMBERS ==========
+    hl({
+        "[^%w_](0x[%da-fA-F]+)",
+        "[^%w_](%d+%.%d+[eE]?[+-]?%d*)",
+        "[^%w_](%.%d+[eE]?[+-]?%d*)",
+        "[^%w_](%d+[eE][+-]?%d*)",
+        "[^%w_](%d+)",
+        "^(0x[%da-fA-F]+)",
+        "^(%d+%.%d+[eE]?[+-]?%d*)",
+        "^(%d+)",
+    }, C.num, true)
+
+    -- ========== OPERATORS ==========
+    -- assign
+    hl({"[=]","%+=","%-=","%*=","%/=","%%="}, C.opAssign)
+    -- compare
+    hl({"==","~=","<=",">=","<",">"}, C.opCompare)
+    -- arithmetic
+    hl({"%+","%-","%*","/","%%","%^","%.%."}, C.opArith)
+    -- other
+    hl({"%.%.%.","#","%.%.",}, C.op)
+
+    -- ========== PUNCTUATION ==========
+    for i, c in next, tableContents do
+        if not isOff(i) then
+            local ch = c.Char
+            if ch == "(" or ch == ")" then c.Color = C.paren
+            elseif ch == "[" or ch == "]" then c.Color = C.bracket
+            elseif ch == "{" or ch == "}" then c.Color = C.brace
+            elseif ch == "," then c.Color = C.comma
+            elseif ch == "." then c.Color = C.dot
+            elseif ch == ":" then c.Color = C.colon
+            elseif ch == ";" then c.Color = C.semicolon
             end
         end
     end
-    
-    -- ============================================================
-    -- 2. الدوال
-    -- ============================================================
-    local functions = {
-        "[^%w_]([%a_][%a%d_]*)%s*%(",
-        "^([%a_][%a%d_]*)%s*%(",
-        "[:%.%(%[%p]([%a_][%a%d_]*)%s*%("
-    }
-    highlightPattern(functions, Colors.function_)
-    
-    -- ============================================================
-    -- 3. الأرقام
-    -- ============================================================
-    local numbers = {
-        "[^%w_](%d+[eE]?%d*)",
-        "[^%w_](%.%d+[eE]?%d*)",
-        "[^%w_](%d+%.%d+[eE]?%d*)",
-        "^(%d+[eE]?%d*)",
-        "^(%.%d+[eE]?%d*)",
-        "^(%d+%.%d+[eE]?%d*)",
-        "0x[%da-fA-F]+"  -- أرقام سداسية
-    }
-    highlightPattern(numbers, Colors.number)
-    
-    -- ============================================================
-    -- 4. القيم المنطقية
-    -- ============================================================
-    local booleans = {
-        "[^%w_](true)", "^(true)",
-        "[^%w_](false)", "^(false)",
-        "[^%w_](nil)", "^(nil)"
-    }
-    highlightPattern(booleans, Colors.boolean)
-    
-    -- ============================================================
-    -- 5. الكائنات
-    -- ============================================================
-    local objects = {
-        "[^%w_:]([%a_][%a%d_]*):",
-        "^([%a_][%a%d_]*):"
-    }
-    highlightPattern(objects, Colors.object)
-    
-    -- ============================================================
-    -- 6. المعاملات
-    -- ============================================================
-    local operators = {
-        "[^_%s%w=>~<%-%+%*]", ">", "~", "<", "%-", "%+", "=", "%*",
-        "==", "~=", "<=", ">="
-    }
-    highlightPattern(operators, Colors.operator)
-    
-    -- ============================================================
-    -- 7. علامات الترقيم
-    -- ============================================================
-    for i, char in next, tableContents do
-        if not isOffLimits(i) then
-            local c = char.Char
-            if c == "(" or c == ")" then
-                char.Color = Colors.parenthesis
-            elseif c == "[" or c == "]" then
-                char.Color = Colors.bracket
-            elseif c == "{" or c == "}" then
-                char.Color = Colors.brace
-            elseif c == "," then
-                char.Color = Colors.comma
-            elseif c == "." then
-                char.Color = Colors.dot
-            elseif c == ":" then
-                char.Color = Colors.colon
-            end
-        end
-    end
-    
-    -- ============================================================
-    -- 8. التعليقات
-    -- ============================================================
+
+    -- ========== COMMENTS & STRINGS (last so they override) ==========
     renderComments()
-    
-    -- ============================================================
-    -- 9. النصوص
-    -- ============================================================
     renderStrings()
-    
-    -- ============================================================
-    -- عرض النص الملون
-    -- ============================================================
-    
-    local lastColor
-    local lineStr = ""
-    local rawStr = ""
-    largestX = 0
-    line = 1
-    
+
+    -- ========== DRAW ==========
+    local lastCol, lineStr, rawStr = nil, "", ""
+    largestX, line = 0, 1
+
     for i = 1, #tableContents + 1 do
-        local char = tableContents[i]
-        
-        if i == #tableContents + 1 or (char and char.Char == "\n") then
-            lineStr = lineStr .. (lastColor and "</font>" or "")
-            
-            local x = TextService:GetTextSize(rawStr, textSize, font, Vector2.new(math.huge, math.huge)).X + 60
-            if x > largestX then
-                largestX = x
-            end
-            
-            local lineText = Instance.new("TextLabel")
-            lineText.TextXAlignment = Enum.TextXAlignment.Left
-            lineText.TextYAlignment = Enum.TextYAlignment.Top
-            lineText.Position = UDim2.new(0, 0, 0, line * lineSpace - lineSpace / 2)
-            lineText.Size = UDim2.new(0, x, 0, textSize)
-            lineText.RichText = true
-            lineText.Font = font
-            lineText.TextSize = textSize
-            lineText.BackgroundTransparency = 1
-            lineText.Text = lineStr
-            lineText.Parent = textFrame
-            
+        local c = tableContents[i]
+
+        if i == #tableContents + 1 or (c and c.Char == "\n") then
+            lineStr ..= (lastCol and "</font>" or "")
+
+            local x = TextService:GetTextSize(rawStr, textSize, font, Vector2.new(math.huge, math.huge)).X + 55
+            if x > largestX then largestX = x end
+
+            local lbl = Instance.new("TextLabel")
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.TextYAlignment = Enum.TextYAlignment.Top
+            lbl.Position = UDim2.new(0, 0, 0, line * lineSpace - lineSpace/2)
+            lbl.Size = UDim2.new(0, x, 0, textSize)
+            lbl.RichText = true
+            lbl.Font = font
+            lbl.TextSize = textSize
+            lbl.BackgroundTransparency = 1
+            lbl.Text = lineStr
+            lbl.Parent = textFrame
+
             if i ~= #tableContents + 1 then
-                local lineNumber = Instance.new("TextLabel")
-                lineNumber.Text = tostring(line)
-                lineNumber.Font = font
-                lineNumber.TextSize = textSize
-                lineNumber.Size = UDim2.new(1, 0, 0, lineSpace)
-                lineNumber.TextXAlignment = Enum.TextXAlignment.Right
-                lineNumber.TextColor3 = Colors.lineNumber
-                lineNumber.Position = UDim2.new(0, 0, 0, line * lineSpace - lineSpace / 2)
-                lineNumber.BackgroundTransparency = 1
-                lineNumber.Parent = lineNumbersFrame
+                local num = Instance.new("TextLabel")
+                num.Text = tostring(line)
+                num.Font = font
+                num.TextSize = textSize
+                num.Size = UDim2.new(1, 0, 0, lineSpace)
+                num.TextXAlignment = Enum.TextXAlignment.Right
+                num.TextColor3 = C.lineNum
+                num.Position = UDim2.new(0, 0, 0, line * lineSpace - lineSpace/2)
+                num.BackgroundTransparency = 1
+                num.Parent = lineNumbersFrame
             end
-            
-            lineStr = ""
-            rawStr = ""
-            lastColor = nil
-            line = line + 1
-            
-            if line % 5 == 0 then
-                RunService.Heartbeat:Wait()
-            end
-        elseif char then
-            if char.Char == " " then
-                lineStr = lineStr .. char.Char
-                rawStr = rawStr .. char.Char
-            elseif char.Char == "\t" then
-                lineStr = lineStr .. string.rep(" ", 4)
-                rawStr = rawStr .. char.Char
+
+            lineStr, rawStr, lastCol = "", "", nil
+            line += 1
+            if line % 6 == 0 then RunService.Heartbeat:Wait() end
+        elseif c then
+            if c.Char == " " then
+                lineStr ..= " "
+                rawStr ..= " "
+            elseif c.Char == "\t" then
+                lineStr ..= "    "
+                rawStr ..= "\t"
             else
-                if char.Color == lastColor then
-                    lineStr = lineStr .. autoEscape(char.Char)
+                if c.Color == lastCol then
+                    lineStr ..= esc(c.Char)
                 else
-                    lineStr = lineStr .. string.format(
-                        '%s<font color="rgb(%d,%d,%d)">',
-                        lastColor and "</font>" or "",
-                        char.Color.R * 255,
-                        char.Color.G * 255,
-                        char.Color.B * 255
+                    lineStr ..= string.format(
+                        '%s<font color="rgb(%d,%d,%d)">%s',
+                        lastCol and "</font>" or "",
+                        math.floor(c.Color.R*255),
+                        math.floor(c.Color.G*255),
+                        math.floor(c.Color.B*255),
+                        esc(c.Char)
                     )
-                    lineStr = lineStr .. autoEscape(char.Char)
-                    lastColor = char.Color
+                    lastCol = c.Color
                 end
-                rawStr = rawStr .. char.Char
+                rawStr ..= c.Char
             end
         end
     end
-    
+
     updateZIndex()
     updateCanvasSize()
 end
 
 -- ============================================================
--- دوال التحكم في الواجهة
+-- UI helpers
 -- ============================================================
-
 function updateCanvasSize()
     scrollingFrame.CanvasSize = UDim2.new(0, largestX + 20, 0, line * lineSpace + 20)
 end
 
 function onFrameSizeChange()
-    local newSize = parentFrame.AbsoluteSize
-    scrollingFrame.Size = UDim2.new(0, newSize.X, 0, newSize.Y)
+    scrollingFrame.Size = UDim2.new(0, parentFrame.AbsoluteSize.X, 0, parentFrame.AbsoluteSize.Y)
 end
 
 function updateZIndex()
     for _, v in next, parentFrame:GetDescendants() do
-        if v:IsA("GuiObject") then
-            v.ZIndex = parentFrame.ZIndex
-        end
+        if v:IsA("GuiObject") then v.ZIndex = parentFrame.ZIndex end
     end
 end
 
 -- ============================================================
--- الدوال العامة (API)
+-- Public API
 -- ============================================================
-
 function Highlight:init(frame)
-    if typeof(frame) == "Instance" and frame:IsA("Frame") then
-        frame:ClearAllChildren()
-        
-        parentFrame = frame
-        scrollingFrame = Instance.new("ScrollingFrame")
-        textFrame = Instance.new("Frame")
-        lineNumbersFrame = Instance.new("Frame")
-        
-        scrollingFrame.Size = UDim2.new(1, 0, 1, 0)
-        scrollingFrame.BackgroundColor3 = Colors.background
-        scrollingFrame.BorderSizePixel = 0
-        scrollingFrame.ScrollBarThickness = 4
-        
-        textFrame.Size = UDim2.new(1, -45, 1, 0)
-        textFrame.Position = UDim2.new(0, 45, 0, 0)
-        textFrame.BackgroundTransparency = 1
-        
-        lineNumbersFrame.Size = UDim2.new(0, 30, 1, 0)
-        lineNumbersFrame.BackgroundTransparency = 1
-        
-        textFrame.Parent = scrollingFrame
-        lineNumbersFrame.Parent = scrollingFrame
-        scrollingFrame.Parent = parentFrame
-        
-        render()
-        
-        parentFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(onFrameSizeChange)
-        parentFrame:GetPropertyChangedSignal("ZIndex"):Connect(updateZIndex)
-    else
-        error("Initialization error: argument " .. typeof(frame) .. " is not a Frame Instance")
+    if typeof(frame) ~= "Instance" or not frame:IsA("Frame") then
+        error("Highlight:init expects a Frame")
     end
+    frame:ClearAllChildren()
+    parentFrame = frame
+
+    scrollingFrame = Instance.new("ScrollingFrame")
+    scrollingFrame.Size = UDim2.new(1,0,1,0)
+    scrollingFrame.BackgroundColor3 = C.bg
+    scrollingFrame.BorderSizePixel = 0
+    scrollingFrame.ScrollBarThickness = 4
+    scrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(55,60,75)
+    scrollingFrame.Parent = parentFrame
+
+    textFrame = Instance.new("Frame")
+    textFrame.Size = UDim2.new(1, -42, 1, 0)
+    textFrame.Position = UDim2.new(0, 42, 0, 0)
+    textFrame.BackgroundTransparency = 1
+    textFrame.Parent = scrollingFrame
+
+    lineNumbersFrame = Instance.new("Frame")
+    lineNumbersFrame.Size = UDim2.new(0, 34, 1, 0)
+    lineNumbersFrame.BackgroundTransparency = 1
+    lineNumbersFrame.Parent = scrollingFrame
+
+    render()
+    parentFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(onFrameSizeChange)
+    parentFrame:GetPropertyChangedSignal("ZIndex"):Connect(updateZIndex)
 end
 
 function Highlight:setRaw(raw)
-    raw = raw .. "\n"
+    raw = (raw or "") .. "\n"
     tableContents = {}
     for i = 1, #raw do
-        table.insert(tableContents, {
-            Char = raw:sub(i, i),
-            Color = Colors.default,
-        })
-        if i % 1000 == 0 then
-            RunService.Heartbeat:Wait()
-        end
+        tableContents[i] = { Char = raw:sub(i,i), Color = C.default }
+        if i % 1200 == 0 then RunService.Heartbeat:Wait() end
     end
     render()
 end
 
 function Highlight:getRaw()
-    local result = ""
-    for _, char in next, tableContents do
-        result = result .. char.Char
-    end
-    return result
+    local r = ""
+    for _, c in next, tableContents do r ..= c.Char end
+    return r
 end
 
 function Highlight:getString()
-    local result = ""
-    for _, char in next, tableContents do
-        result = result .. char.Char:sub(1, 1)
-    end
-    return result
+    return Highlight:getRaw()
 end
 
-function Highlight:getTable()
-    return tableContents
-end
+function Highlight:getTable() return tableContents end
+function Highlight:getSize() return #tableContents end
 
-function Highlight:getSize()
-    return #tableContents
-end
-
-function Highlight:getLine(lineNum)
-    local currentLine = 0
-    local result = ""
+function Highlight:getLine(n)
+    local cur, res = 0, ""
     for _, v in next, tableContents do
-        if v.Char == "\n" then
-            currentLine = currentLine + 1
-        end
-        if currentLine == lineNum and v.Char ~= "\n" then
-            result = result .. v.Char
-        end
-        if currentLine > lineNum then
-            break
-        end
+        if v.Char == "\n" then cur += 1 end
+        if cur == n and v.Char ~= "\n" then res ..= v.Char end
+        if cur > n then break end
     end
-    return result
+    return res
 end
 
-function Highlight:setLine(lineNum, text)
-    local currentLine = 0
-    local startPos = 0
-    local endPos = 0
-    
+function Highlight:setLine(n, text)
+    local cur, startP, endP = 0, 0, 0
     for i, v in next, tableContents do
         if v.Char == "\n" then
-            currentLine = currentLine + 1
-            if currentLine == lineNum then
-                startPos = i + 1
-            elseif currentLine == lineNum + 1 then
-                endPos = i
-                break
-            end
+            cur += 1
+            if cur == n then startP = i + 1
+            elseif cur == n + 1 then endP = i break end
         end
     end
-    
-    if startPos > 0 and endPos > 0 then
-        local str = Highlight:getRaw()
-        str = str:sub(1, startPos - 1) .. text .. "\n" .. str:sub(endPos, -1)
-        Highlight:setRaw(str)
+    if startP > 0 and endP > 0 then
+        local s = Highlight:getRaw()
+        Highlight:setRaw(s:sub(1, startP-1) .. text .. "\n" .. s:sub(endP))
     end
 end
 
-function Highlight:insertLine(lineNum, text)
-    local currentLine = 0
-    local insertPos = 0
-    
+function Highlight:insertLine(n, text)
+    local cur, pos = 0, 0
     for i, v in next, tableContents do
         if v.Char == "\n" then
-            currentLine = currentLine + 1
-            if currentLine == lineNum then
-                insertPos = i
-                break
-            end
+            cur += 1
+            if cur == n then pos = i break end
         end
     end
-    
-    if insertPos > 0 then
-        local str = Highlight:getRaw()
-        str = str:sub(1, insertPos) .. text .. "\n" .. str:sub(insertPos + 1, -1)
-        Highlight:setRaw(str)
+    if pos > 0 then
+        local s = Highlight:getRaw()
+        Highlight:setRaw(s:sub(1, pos) .. text .. "\n" .. s:sub(pos+1))
     end
 end
 
--- ============================================================
 -- Constructor
--- ============================================================
-
-local constructor = {}
-
-function constructor.new(...)
-    local class = Highlight
-    local new = {}
-    class.__index = class
-    setmetatable(new, class)
-    new:init(...)
-    return new
+local ctor = {}
+function ctor.new(...)
+    local o = setmetatable({}, {__index = Highlight})
+    o:init(...)
+    return o
 end
 
-return constructor
+return ctor
